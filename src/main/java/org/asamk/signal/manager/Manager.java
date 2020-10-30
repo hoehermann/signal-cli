@@ -1935,7 +1935,6 @@ public class Manager implements Closeable {
             boolean ignoreAttachments,
             ReceiveMessageHandler handler
     ) throws IOException {
-        retryFailedReceivedMessages(handler, ignoreAttachments);
 
         Set<HandleAction> queuedActions = null;
 
