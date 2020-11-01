@@ -1071,10 +1071,12 @@ public class Manager implements Closeable {
         return sendMessage(messageBuilder, List.of(recipient));
     }
 
-    void sendReceipt(
-            SignalServiceAddress remoteAddress, long messageId
-    ) throws IOException, UntrustedIdentityException {
-        SignalServiceReceiptMessage receiptMessage = new SignalServiceReceiptMessage(SignalServiceReceiptMessage.Type.DELIVERY,
+    public void sendReceipt(SignalServiceAddress remoteAddress, long messageId) throws IOException, UntrustedIdentityException {
+        sendReceipt(remoteAddress, messageId, SignalServiceReceiptMessage.Type.DELIVERY);
+    }
+
+    public void sendReceipt(SignalServiceAddress remoteAddress, long messageId, SignalServiceReceiptMessage.Type type) throws IOException, UntrustedIdentityException {
+        SignalServiceReceiptMessage receiptMessage = new SignalServiceReceiptMessage(type,
                 List.of(messageId),
                 System.currentTimeMillis());
 
