@@ -1000,7 +1000,9 @@ public class Manager implements Closeable {
     void sendReceipt(
             SignalServiceAddress remoteAddress, long messageId
     ) throws IOException, UntrustedIdentityException {
-        SignalServiceReceiptMessage receiptMessage = new SignalServiceReceiptMessage(SignalServiceReceiptMessage.Type.DELIVERY,
+    	sendReceipt(remoteAddress, messageId, SignalServiceReceiptMessage.Type.DELIVERY);
+    public void sendReceipt(SignalServiceAddress remoteAddress, long messageId, SignalServiceReceiptMessage.Type type) throws IOException, UntrustedIdentityException {
+        SignalServiceReceiptMessage receiptMessage = new SignalServiceReceiptMessage(type,
                 Collections.singletonList(messageId),
                 System.currentTimeMillis());
 
