@@ -182,11 +182,11 @@ public class Manager implements Closeable {
     private final ServiceEnvironmentConfig serviceEnvironmentConfig;
     private final String userAgent;
 
-    private SignalAccount account;
+    public SignalAccount account;
     private final SignalServiceAccountManager accountManager;
     private final GroupsV2Api groupsV2Api;
     private final GroupsV2Operations groupsV2Operations;
-    private final SignalServiceMessageReceiver messageReceiver;
+    public final SignalServiceMessageReceiver messageReceiver;
     private final ClientZkProfileOperations clientZkProfileOperations;
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
@@ -972,10 +972,12 @@ public class Manager implements Closeable {
         return sendMessage(messageBuilder, List.of(recipient));
     }
 
-    void sendReceipt(
-            SignalServiceAddress remoteAddress, long messageId
-    ) throws IOException, UntrustedIdentityException {
-        SignalServiceReceiptMessage receiptMessage = new SignalServiceReceiptMessage(SignalServiceReceiptMessage.Type.DELIVERY,
+    public void sendReceipt(SignalServiceAddress remoteAddress, long messageId) throws IOException, UntrustedIdentityException {
+        sendReceipt(remoteAddress, messageId, SignalServiceReceiptMessage.Type.DELIVERY);
+    }
+
+    public void sendReceipt(SignalServiceAddress remoteAddress, long messageId, SignalServiceReceiptMessage.Type type) throws IOException, UntrustedIdentityException {
+        SignalServiceReceiptMessage receiptMessage = new SignalServiceReceiptMessage(type,
                 List.of(messageId),
                 System.currentTimeMillis());
 
