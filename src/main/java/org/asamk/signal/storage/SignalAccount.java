@@ -26,6 +26,7 @@ import org.asamk.signal.storage.protocol.SignalServiceAddressResolver;
 import org.asamk.signal.storage.stickers.StickerStore;
 import org.asamk.signal.storage.threads.LegacyJsonThreadStore;
 import org.asamk.signal.storage.threads.ThreadInfo;
+import org.asamk.signal.util.IOUtils;
 import org.asamk.signal.util.Util;
 import org.signal.zkgroup.InvalidInputException;
 import org.signal.zkgroup.profiles.ProfileKey;
@@ -35,11 +36,20 @@ import org.whispersystems.libsignal.IdentityKeyPair;
 import org.whispersystems.libsignal.state.PreKeyRecord;
 import org.whispersystems.libsignal.state.SignedPreKeyRecord;
 import org.whispersystems.libsignal.util.Medium;
+import org.whispersystems.libsignal.util.Pair;
 import org.whispersystems.signalservice.api.push.SignalServiceAddress;
 import org.whispersystems.util.Base64;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
+import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.channels.Channels;
+import java.nio.channels.ClosedChannelException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.util.Collection;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -50,7 +60,7 @@ public class SignalAccount implements Closeable {
 
     private final ObjectMapper jsonProcessor = new ObjectMapper();
     final static String PURPLE_SIGNALDATA_KEY = "signaldata";
-    private final long connection;
+    private final long account;
     private String username;
     private UUID uuid;
     private int deviceId = SignalServiceAddress.DEFAULT_DEVICE_ID;
@@ -71,8 +81,8 @@ public class SignalAccount implements Closeable {
     private ProfileStore profileStore;
     private StickerStore stickerStore;
 
-    private SignalAccount(final long connection) {
-        this.connection = connection;
+    private SignalAccount(final long account) {
+        this.account = account;
         jsonProcessor.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.NONE); // disable autodetect
         jsonProcessor.disable(SerializationFeature.INDENT_OUTPUT); // for pretty print, you can disable it.
         jsonProcessor.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
@@ -81,17 +91,15 @@ public class SignalAccount implements Closeable {
     }
 
     public static SignalAccount load(File dataPath, String username) throws IOException {
-        final long connection = PurpleSignal.lookupUsername(username);
-        SignalAccount account = new SignalAccount(connection);
-        account.load();
+        SignalAccount account = new SignalAccount(PurpleSignal.lookupAccountByUsername(username));
+        account.load(dataPath);
         return account;
     }
 
     public static SignalAccount create(
             File dataPath, String username, IdentityKeyPair identityKey, int registrationId, ProfileKey profileKey
     ) throws IOException {
-        final long connection = PurpleSignal.lookupUsername(username);
-        SignalAccount account = new SignalAccount(connection);
+        SignalAccount account = new SignalAccount(PurpleSignal.lookupAccountByUsername(username));
 
         account.username = username;
         account.profileKey = profileKey;
@@ -117,8 +125,7 @@ public class SignalAccount implements Closeable {
             String signalingKey,
             ProfileKey profileKey
     ) throws IOException {
-        final long connection = PurpleSignal.lookupUsername(username);
-        SignalAccount account = new SignalAccount(connection);
+        SignalAccount account = new SignalAccount(PurpleSignal.lookupAccountByUsername(username));
 
         account.username = username;
         account.uuid = uuid;
@@ -154,16 +161,16 @@ public class SignalAccount implements Closeable {
         return new File(getUserPath(dataPath, username), "group-cache");
     }
 
-    public static boolean userExists(final long connection) {
-        return !PurpleSignal.getSettingsStringNatively(connection, PURPLE_SIGNALDATA_KEY, "").equals("");
+    public static boolean userExists(final long account) {
+        return !PurpleSignal.getSettingsStringNatively(account, PURPLE_SIGNALDATA_KEY, "").equals("");
     }
 
-    public static boolean userExists(String dataPath, String username) {
+    public static boolean userExists(File dataPath, String username) {
         if (username == null) {
             return false;
         }
         try {
-            return userExists(PurpleSignal.lookupUsername(username));
+            return userExists(PurpleSignal.lookupAccountByUsername(username));
         } catch (IOException e) {
             return false;
         }
@@ -171,7 +178,7 @@ public class SignalAccount implements Closeable {
 
     private void load(File dataPath) throws IOException {
         JsonNode rootNode;
-        String json = PurpleSignal.getSettingsStringNatively(this.connection, PURPLE_SIGNALDATA_KEY, "");
+        String json = PurpleSignal.getSettingsStringNatively(this.account, PURPLE_SIGNALDATA_KEY, "");
         rootNode = jsonProcessor.readTree(json);
 
         JsonNode uuidNode = rootNode.get("uuid");
@@ -332,7 +339,7 @@ public class SignalAccount implements Closeable {
         try {
             // Write to memory first to prevent corrupting the file in case of serialization errors
             String json = jsonProcessor.writeValueAsString(rootNode);
-            PurpleSignal.setSettingsStringNatively(this.connection, PURPLE_SIGNALDATA_KEY, json);
+            PurpleSignal.setSettingsStringNatively(this.account, PURPLE_SIGNALDATA_KEY, json);
         } catch (Exception e) {
             logger.error("Error saving file: {}", e.getMessage());
         }
