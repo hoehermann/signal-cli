@@ -605,7 +605,7 @@ public class Manager implements Closeable {
                 clientZkProfileOperations);
     }
 
-    private SignalServiceMessageReceiver getOrCreateMessageReceiver() {
+    public SignalServiceMessageReceiver getOrCreateMessageReceiver() {
         if (messageReceiver == null) {
             messageReceiver = createMessageReceiver();
         }
