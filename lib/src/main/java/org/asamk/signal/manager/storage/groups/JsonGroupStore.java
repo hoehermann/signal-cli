@@ -12,6 +12,8 @@ import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
+import de.hehoe.purple_signal.PurpleSignal;
+
 import org.asamk.signal.manager.groups.GroupId;
 import org.asamk.signal.manager.groups.GroupIdV1;
 import org.asamk.signal.manager.groups.GroupIdV2;
@@ -40,35 +42,32 @@ public class JsonGroupStore {
     private final static Logger logger = LoggerFactory.getLogger(JsonGroupStore.class);
 
     private static final ObjectMapper jsonProcessor = new ObjectMapper();
-    public File groupCachePath;
+    public long purpleAccount;
 
     @JsonProperty("groups")
     @JsonSerialize(using = GroupsSerializer.class)
     @JsonDeserialize(using = GroupsDeserializer.class)
     private final Map<GroupId, GroupInfo> groups = new HashMap<>();
 
-    private JsonGroupStore() {
+    @SuppressWarnings("unused") // this probably exists to make the JSON deserializer happy
+	private JsonGroupStore() {
     }
 
     public JsonGroupStore(final File groupCachePath) {
-        this.groupCachePath = groupCachePath;
+        this.purpleAccount = 0;
+    	throw new UnsupportedOperationException("This constructor is not available in this implementation for use with libpurple.");
+    }
+
+    public JsonGroupStore(long purpleAccount) {
+        this.purpleAccount = purpleAccount;
     }
 
     public void updateGroup(GroupInfo group) {
         groups.put(group.getGroupId(), group);
         if (group instanceof GroupInfoV2 && ((GroupInfoV2) group).getGroup() != null) {
-            try {
-                IOUtils.createPrivateDirectories(groupCachePath);
-                try (FileOutputStream stream = new FileOutputStream(getGroupFile(group.getGroupId()))) {
-                    ((GroupInfoV2) group).getGroup().writeTo(stream);
-                }
-                final File groupFileLegacy = getGroupFileLegacy(group.getGroupId());
-                if (groupFileLegacy.exists()) {
-                    groupFileLegacy.delete();
-                }
-            } catch (IOException e) {
-                logger.warn("Failed to cache group, ignoring: {}", e.getMessage());
-            }
+        	String groupData = Base64.getEncoder().encodeToString(((GroupInfoV2) group).getGroup().toByteArray());
+        	String groupKey = groupKey(group);
+        	PurpleSignal.setSettingsStringNatively(this.purpleAccount, groupKey, groupData);
         }
     }
 
@@ -103,27 +102,22 @@ public class JsonGroupStore {
 
     private void loadDecryptedGroup(final GroupInfo group) {
         if (group instanceof GroupInfoV2 && ((GroupInfoV2) group).getGroup() == null) {
-            File groupFile = getGroupFile(group.getGroupId());
-            if (!groupFile.exists()) {
-                groupFile = getGroupFileLegacy(group.getGroupId());
-            }
-            if (!groupFile.exists()) {
-                return;
-            }
-            try (FileInputStream stream = new FileInputStream(groupFile)) {
-                ((GroupInfoV2) group).setGroup(DecryptedGroup.parseFrom(stream));
-            } catch (IOException ignored) {
-            }
+        	String groupKey = groupKey(group);
+        	String base64Data = PurpleSignal.getSettingsStringNatively(this.purpleAccount, groupKey, "");
+        	try {
+        		byte[] groupData = Base64.getDecoder().decode(base64Data);
+				((GroupInfoV2) group).setGroup(DecryptedGroup.parseFrom(groupData));
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
         }
     }
 
-    private File getGroupFileLegacy(final GroupId groupId) {
-        return new File(groupCachePath, Hex.toStringCondensed(groupId.serialize()));
+    private static String groupKey(GroupInfo group) {
+    	return "group_"+group.getGroupId().toBase64();
     }
-
-    private File getGroupFile(final GroupId groupId) {
-        return new File(groupCachePath, groupId.toBase64().replace("/", "_"));
-    }
+    
 
     public GroupInfoV1 getOrCreateGroupV1(GroupIdV1 groupId) {
         GroupInfo group = getGroup(groupId);
