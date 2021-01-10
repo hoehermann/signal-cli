@@ -86,7 +86,7 @@ public class SignalAccount implements Closeable {
 
     public static SignalAccount load(File dataPath, String username) throws IOException {
         SignalAccount account = new SignalAccount(PurpleSignal.lookupAccountByUsername(username));
-        account.load(dataPath);
+        account.load();
         return account;
     }
 
@@ -98,7 +98,7 @@ public class SignalAccount implements Closeable {
         account.username = username;
         account.profileKey = profileKey;
         account.signalProtocolStore = new JsonSignalProtocolStore(identityKey, registrationId);
-        account.groupStore = new JsonGroupStore(getGroupCachePath(dataPath, username));
+        account.groupStore = new JsonGroupStore(PurpleSignal.lookupAccountByUsername(username));
         account.contactStore = new JsonContactsStore();
         account.recipientStore = new RecipientStore();
         account.profileStore = new ProfileStore();
@@ -128,7 +128,7 @@ public class SignalAccount implements Closeable {
         account.deviceId = deviceId;
         account.signalingKey = signalingKey;
         account.signalProtocolStore = new JsonSignalProtocolStore(identityKey, registrationId);
-        account.groupStore = new JsonGroupStore(getGroupCachePath(dataPath, username));
+        account.groupStore = new JsonGroupStore(PurpleSignal.lookupAccountByUsername(username));
         account.contactStore = new JsonContactsStore();
         account.recipientStore = new RecipientStore();
         account.profileStore = new ProfileStore();
@@ -170,7 +170,7 @@ public class SignalAccount implements Closeable {
         }
     }
 
-    private void load(File dataPath) throws IOException {
+    private void load() throws IOException {
         JsonNode rootNode;
         String json = PurpleSignal.getSettingsStringNatively(this.account, PURPLE_SIGNALDATA_KEY, "");
         rootNode = jsonProcessor.readTree(json);
@@ -224,14 +224,7 @@ public class SignalAccount implements Closeable {
         signalProtocolStore = jsonProcessor.convertValue(Utils.getNotNullNode(rootNode, "axolotlStore"),
                 JsonSignalProtocolStore.class);
         registered = Utils.getNotNullNode(rootNode, "registered").asBoolean();
-        JsonNode groupStoreNode = rootNode.get("groupStore");
-        if (groupStoreNode != null) {
-            groupStore = jsonProcessor.convertValue(groupStoreNode, JsonGroupStore.class);
-            groupStore.groupCachePath = getGroupCachePath(dataPath, username);
-        }
-        if (groupStore == null) {
-            groupStore = new JsonGroupStore(getGroupCachePath(dataPath, username));
-        }
+        groupStore = new JsonGroupStore(this.account);
 
         JsonNode contactStoreNode = rootNode.get("contactStore");
         if (contactStoreNode != null) {
